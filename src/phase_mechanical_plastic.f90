@@ -27,6 +27,11 @@ submodule(phase:mechanical) plastic
         myPlasticity
     end function plastic_dislotwin_init
 
+    module function plastic_dislotwingnd_init()  result(myPlasticity)       !!add
+      logical, dimension(:), allocatable :: &
+        myPlasticity
+    end function plastic_dislotwingnd_init
+
     module function plastic_dislotungsten_init() result(myPlasticity)
       logical, dimension(:), allocatable :: &
         myPlasticity
@@ -88,6 +93,21 @@ submodule(phase:mechanical) plastic
         me
     end subroutine dislotwin_LpAndItsTangent
 
+    module subroutine dislotwingnd_LpAndItsTangent(Lp,dLp_dMp,Mp,T,ph,me)              !add
+      real(pReal), dimension(3,3),     intent(out) :: &
+        Lp
+      real(pReal), dimension(3,3,3,3), intent(out) :: &
+        dLp_dMp
+
+      real(pReal), dimension(3,3),     intent(in) :: &
+        Mp
+      real(pReal),                     intent(in) :: &
+        T
+      integer,                         intent(in) :: &
+        ph, &
+        me
+    end subroutine dislotwingnd_LpAndItsTangent
+    
     pure module subroutine dislotungsten_LpAndItsTangent(Lp,dLp_dMp,Mp,T,ph,me)
       real(pReal), dimension(3,3),     intent(out) :: &
         Lp
@@ -154,6 +174,16 @@ submodule(phase:mechanical) plastic
         me
     end subroutine dislotwin_dotState
 
+    module subroutine dislotwingnd_dotState(Mp,T,ph,me)              !add
+      real(pReal), dimension(3,3),  intent(in) :: &
+        Mp                                                                                          !< Mandel stress
+      real(pReal),                  intent(in) :: &
+        T
+      integer,                      intent(in) :: &
+        ph, &
+        me
+    end subroutine dislotwingnd_dotState
+
     module subroutine dislotungsten_dotState(Mp,T,ph,me)
       real(pReal), dimension(3,3),  intent(in) :: &
         Mp                                                                                          !< Mandel stress
@@ -184,6 +214,14 @@ submodule(phase:mechanical) plastic
       real(pReal),   intent(in) :: &
         T
     end subroutine dislotwin_dependentState
+
+    module subroutine dislotwingnd_dependentState(T,ph,me)       !add
+      integer,       intent(in) :: &
+        ph, &
+        me
+      real(pReal),   intent(in) :: &
+        T
+    end subroutine dislotwingnd_dependentState
 
     module subroutine dislotungsten_dependentState(ph,me)
       integer,       intent(in) :: &
@@ -229,6 +267,7 @@ module subroutine plastic_init
   where(plastic_phenopowerlaw_init())     phase_plasticity = PLASTICITY_PHENOPOWERLAW_ID
   where(plastic_kinehardening_init())     phase_plasticity = PLASTICITY_KINEHARDENING_ID
   where(plastic_dislotwin_init())         phase_plasticity = PLASTICITY_DISLOTWIN_ID
+  where(plastic_dislotwingnd_init())      phase_plasticity = PLASTICITY_DISLOTWINGND_ID                 !add
   where(plastic_dislotungsten_init())     phase_plasticity = PLASTICITY_DISLOTUNGSTEN_ID
   where(plastic_nonlocal_init())          phase_plasticity = PLASTICITY_NONLOCAL_ID
 
@@ -284,6 +323,9 @@ module subroutine plastic_LpAndItsTangents(Lp, dLp_dS, dLp_dFi, &
     case (PLASTICITY_DISLOTWIN_ID) plasticType
       call dislotwin_LpAndItsTangent(Lp,dLp_dMp,Mp, thermal_T(ph,me),ph,me)
 
+    case (PLASTICITY_DISLOTWINGND_ID) plasticType                                !add
+      call dislotwingnd_LpAndItsTangent(Lp,dLp_dMp,Mp, thermal_T(ph,me),ph,me)
+
     case (PLASTICITY_DISLOTUNGSTEN_ID) plasticType
       call dislotungsten_LpAndItsTangent(Lp,dLp_dMp,Mp, thermal_T(ph,me),ph,me)
 
@@ -333,6 +375,9 @@ module function plastic_dotState(subdt,co,ip,el,ph,me) result(broken)
     case (PLASTICITY_DISLOTWIN_ID) plasticType
       call dislotwin_dotState(Mp,thermal_T(ph,me),ph,me)
 
+    case (PLASTICITY_DISLOTWINGND_ID) plasticType                   !add
+      call dislotwingnd_dotState(Mp,thermal_T(ph,me),ph,me)
+
     case (PLASTICITY_DISLOTUNGSTEN_ID) plasticType
       call dislotungsten_dotState(Mp,thermal_T(ph,me),ph,me)
 
@@ -367,6 +412,9 @@ module subroutine plastic_dependentState(co, ip, el)
 
     case (PLASTICITY_DISLOTWIN_ID) plasticType
       call dislotwin_dependentState(thermal_T(ph,me),ph,me)
+
+    case (PLASTICITY_DISLOTWINGND_ID) plasticType                  !add
+      call dislotwingnd_dependentState(thermal_T(ph,me),ph,me)
 
     case (PLASTICITY_DISLOTUNGSTEN_ID) plasticType
       call dislotungsten_dependentState(ph,me)
