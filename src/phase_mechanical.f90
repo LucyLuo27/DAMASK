@@ -15,6 +15,7 @@ submodule(phase) mechanical
     PLASTICITY_PHENOPOWERLAW_ID, &
     PLASTICITY_KINEHARDENING_ID, &
     PLASTICITY_DISLOTWIN_ID, &
+    PLASTICITY_DISLOTWINGND_ID, &      !add
     PLASTICITY_DISLOTUNGSTEN_ID, &
     PLASTICITY_NONLOCAL_ID, &
     KINEMATICS_UNDEFINED_ID, &
@@ -144,6 +145,11 @@ submodule(phase) mechanical
       integer,          intent(in) :: ph
       character(len=*), intent(in) :: group
     end subroutine plastic_dislotwin_results
+
+    module subroutine plastic_dislotwingnd_results(ph,group)        !add
+      integer,          intent(in) :: ph
+      character(len=*), intent(in) :: group
+    end subroutine plastic_dislotwingnd_results
 
     module subroutine plastic_dislotungsten_results(ph,group)
       integer,          intent(in) :: ph
@@ -414,6 +420,9 @@ module subroutine mechanical_results(group,ph)
 
     case(PLASTICITY_DISLOTWIN_ID)
       call plastic_dislotwin_results(ph,group//'plastic/')
+
+    case(PLASTICITY_DISLOTWINGND_ID)                                !add
+      call plastic_dislotwingnd_results(ph,group//'plastic/')
 
     case(PLASTICITY_DISLOTUNGSTEN_ID)
       call plastic_dislotungsten_results(ph,group//'plastic/')
