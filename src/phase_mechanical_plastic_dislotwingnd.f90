@@ -8,9 +8,9 @@ submodule (phase:plastic) dislotwingnd
    real(pReal) :: &
      mu                   = 1.0_pReal, &                                                            !< equivalent shear modulus
      nu                   = 1.0_pReal, &                                                            !< equivalent shear Poisson's ratio
-     c1                   = 1.0_pReal, &                                                            !< material constant for passing stress, &
-     c2                   = 1.0_pReal, &                                                            !< material constant for the formation of ssd dislo, &
-     c3                   = 1.0_pReal                                                               !< material constant for the annihilation of ssd dislo, &
+     c1                   = 1.0_pReal, &                                                            !< material constant for passing stress
+     c2                   = 1.0_pReal, &                                                            !< material constant for the formation of ssd dislo
+     c3                   = 1.0_pReal                                                               !< material constant for the annihilation of ssd dislo
    real(pReal),                  dimension(:),     allocatable :: & 
      tau_0, &                                                                                       !< strength due to elements in solid solution
      b_sl, &                                                                                        !< absolute length of burgers vector [m] for each slip system
@@ -31,6 +31,8 @@ submodule (phase:plastic) dislotwingnd
  type, private :: tDislotwingndState
    real(pReal),                  dimension(:,:),   pointer :: &
      rho_mob, &
+     rho_gnd_edge, &
+     rho_gnd_screw, &
      gamma_sl
  end type tDislotwingndState 
 
@@ -66,7 +68,7 @@ module function plastic_dislotwingnd_init() result(myPlasticity)
     N_sl
   real(pReal), allocatable, dimension(:) :: &
     rho_mob_0, &                                                                                    !< initial unipolar dislocation density per slip system
-    rho_gnd_edge_0,                                                                                 !< initial gnd_edge dislocation density ?special position?
+    rho_gnd_edge_0, &                                                                                 !< initial gnd_edge dislocation density ?special position?
     rho_gnd_screw_0
   character(len=pStringLen) :: &
     extmsg = ''
@@ -346,7 +348,7 @@ module subroutine getgradient_for_gamma_sl(ph, el)
        grad_gamma_sl_forall(1:3,n,eli) = vectorField_real(1:3,i,j,k)                 !save the gardient field into grad_gamma_sl
     enddo;enddo;enddo
  enddo
-   grad_gamma_sl(:,:) =grad_gamma_sl_forall(:,:,el)
+   grad_gamma_sl(1:3,:) =grad_gamma_sl_forall(1:3,:,el)
 end subroutine getgradient_for_gamma_sl
 
 !--------------------------------------------------------------------------------------------------
@@ -369,7 +371,7 @@ module subroutine dislotwingnd_dependentState(T,ph,me)
  !* threshold stress for dislocation motion
  do i = 1 , prm%sum_N_sl
   rho_gnd(i)  = sqrt(sst%rho_gnd_edge(i,me)**2.0_pReal + sst%rho_gnd_screw(i,me)**2.0_pReal))
-  dst%tau_pass(i,me) = prm%c1*prm%mu*prm%b_sl(i)*sqrt(stt%rho_mob(i,me)+rho_gnd(i))                      !!!now only for mob dislo, gnd dislo later
+  dst%tau_pass(i,me) = prm%c1*prm%mu*prm%b_sl(i)*sqrt(stt%rho_mob(i,me)+rho_gnd(i))                      !!!now not consider the interaction
  enddo
  
  end associate
