@@ -174,7 +174,7 @@ submodule(phase:mechanical) plastic
         me
     end subroutine dislotwin_dotState
 
-    module subroutine dislotwingnd_dotState(Mp,T,ph,me)              !add
+    module subroutine dislotwingnd_dotState(Mp,T,ph,me,el)              !add
       real(pReal), dimension(3,3),  intent(in) :: &
         Mp                                                                                          !< Mandel stress
       real(pReal),                  intent(in) :: &
@@ -376,7 +376,7 @@ module function plastic_dotState(subdt,co,ip,el,ph,me) result(broken)
       call dislotwin_dotState(Mp,thermal_T(ph,me),ph,me)
 
     case (PLASTICITY_DISLOTWINGND_ID) plasticType                   !add
-      call dislotwingnd_dotState(Mp,thermal_T(ph,me),ph,me)
+      call dislotwingnd_dotState(Mp,thermal_T(ph,me),ph,me,el)
 
     case (PLASTICITY_DISLOTUNGSTEN_ID) plasticType
       call dislotungsten_dotState(Mp,thermal_T(ph,me),ph,me)
