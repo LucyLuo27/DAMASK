@@ -17,6 +17,9 @@ submodule (phase:plastic) dislotwingnd
      Delta_F,&                                                                                      !< activation energy for glide [J] for each slip system
      Delta_V,&                                                                                      !< activation wolume for glide [b^3] for each slip system
      v0                                                                                             !< dislocation velocity prefactor [m/s] for each slip system
+   real(pReal),                  dimension(:,:),   allocatable :: &
+     M_sl, &                                                                                        !!!< slip direction m
+     T_sl
    real(pReal),                  dimension(:,:,:), allocatable :: &
      P_sl
    integer :: & 
@@ -62,7 +65,9 @@ module function plastic_dislotwingnd_init() result(myPlasticity)
  integer,     dimension(:), allocatable :: &
     N_sl
   real(pReal), allocatable, dimension(:) :: &
-    rho_mob_0                                                                                    !< initial unipolar dislocation density per slip system
+    rho_mob_0, &                                                                                    !< initial unipolar dislocation density per slip system
+    rho_gnd_edge_0,                                                                                 !< initial gnd_edge dislocation density ?special position?
+    rho_gnd_screw_0
   character(len=pStringLen) :: &
     extmsg = ''
   class(tNode), pointer :: &
@@ -119,14 +124,22 @@ module function plastic_dislotwingnd_init() result(myPlasticity)
    N_sl      = pl%get_asInts('N_sl',defaultVal=emptyIntArray)
    prm%sum_N_sl  = sum(abs(N_sl))
    slipActive: if (prm%sum_N_sl > 0) then
-     prm%P_sl    = lattice_SchmidMatrix_slip(N_sl,phase%get_asString('lattice'),&
-                                             phase%get_asFloat('c/a',defaultVal=0.0_pReal))
+     prm%P_sl = lattice_SchmidMatrix_slip(N_sl,phase%get_asString('lattice'),&
+                                          phase%get_asFloat('c/a',defaultVal=0.0_pReal))
+     prm%M_sl = lattice_slip_direction(N_sl,phase%get_asString('lattice_structure'),&                           !!!slip direction m
+                                       phase%get_asFloat('c/a',defaultVal=0.0_pReal))
+     prm%T_sl = lattice_slip_transverse(N_sl,phase%get_asString('lattice_structure'),&                           !!!normal slip plane m
+                                         phase%get_asFloat('c/a',defaultVal=0.0_pReal))
      
-     rho_mob_0                = pl%get_asFloats('rho_mob_0',   requiredSize=size(N_sl))
-     prm%v_0                  = pl%get_asFloats('v_0',         requiredSize=size(N_sl))
-     prm%b_sl                 = pl%get_asFloats('b_sl',        requiredSize=size(N_sl))
-     prm%Q_s                  = pl%get_asFloats('Q_s',         requiredSize=size(N_sl))
-     prm%tau_0                = pl%get_asFloats('tau_0',       requiredSize=size(N_sl))
+     rho_mob_0                = pl%get_asFloats('rho_mob_0',      requiredSize=size(N_sl))
+     rho_gnd_edge_0           = pl%get_asFloats('rho_gnd_edge_0', requiredSize=size(N_sl), &
+                                                      defaultVal=[(0.0_pReal, i=1,size(N_sl))])                       !first guessing
+     rho_gnd_screw_0          = pl%get_asFloats('rho_gnd_screw_0',requiredSize=size(N_sl), &
+                                                       defaultVal=[(0.0_pReal, i=1,size(N_sl))])                       !first guessing
+     prm%v_0                  = pl%get_asFloats('v_0',            requiredSize=size(N_sl))
+     prm%b_sl                 = pl%get_asFloats('b_sl',           requiredSize=size(N_sl))
+     prm%Q_s                  = pl%get_asFloats('Q_s',            requiredSize=size(N_sl))
+     prm%tau_0                = pl%get_asFloats('tau_0',          requiredSize=size(N_sl))
      
      prm%Delta_V              = pl%get_asFloat('activ_volume') * prm%b_sl**3.0_pReal
      prm%c1                   = pl%get_asFloat('c1_passsingstress')
@@ -157,7 +170,10 @@ module function plastic_dislotwingnd_init() result(myPlasticity)
 !--------------------------------------------------------------------------------------------------
 ! allocate state arrays
    Nmembers = count(material_phaseAt2 == ph)
-   sizeDotState = size(['rho_mob ','gamma_sl']) * prm%sum_N_sl                   !!!now only for slip
+   sizeDotState = size(['rho_mob      ', &
+                        'rho_gnd_edge ', &
+                        'rho_gnd_screw', &
+                        'gamma_sl     ']) * prm%sum_N_sl                   !!!now only for slip
    sizeState = sizeDotState
 
    call phase_allocateState(plasticState(ph),Nmembers,sizeState,sizeDotState,0)                                     
@@ -171,8 +187,17 @@ module function plastic_dislotwingnd_init() result(myPlasticity)
    dot%rho_mob=>plasticState(p)%dotState(startIndex:endIndex,:)
    plasticState(ph)%atol(startIndex:endIndex) = pl%get_asFloat('atol_rho',defaultVal=1.0_pReal)
    if (any(plasticState(ph)%atol(startIndex:endIndex) < 0.0_pReal)) extmsg = trim(extmsg)//' atol_rho'
-
-
+   
+   startIndex = endIndex + 1
+   endIndex   = endIndex + prm%sum_N_sl
+   sst%rho_gnd_edge=>plasticState(p)%dotState(startIndex:endIndex,:)
+   dot%rho_gnd_edge=>plasticState(p)%dotState(startIndex:endIndex,:)
+   
+   startIndex = endIndex + 1
+   endIndex   = endIndex + prm%sum_N_sl
+   stt%rho_gnd_screw=>plasticState(p)%state(startIndex:endIndex,:)
+   dot%rho_gnd_screw=>plasticState(p)%dotState(startIndex:endIndex,:)
+   
    startIndex = endIndex + 1
    endIndex   = endIndex + prm%sum_N_sl
    stt%gamma_sl=>plasticState(p)%state(startIndex:endIndex,:)
@@ -231,7 +256,7 @@ end subroutine dislotwingnd_LpAndItsTangent
 !--------------------------------------------------------------------------------------------------
 !> @brief calculates the rate of change of microstructure
 !--------------------------------------------------------------------------------------------------
-module subroutine dislotwingnd_dotState(Mp,T,ph,me)
+module subroutine dislotwingnd_dotState(Mp,T,ph,me,el)
 
  real(pReal), dimension(3,3),  intent(in):: &
    Mp                                                                                               !< Mandel stress
@@ -245,6 +270,8 @@ module subroutine dislotwingnd_dotState(Mp,T,ph,me)
    dot_gamma_sl, &
    dot_rho_ssd_formation, &
    dot_rho_ssd_athermal_anni
+ real(pReal), dimension(3,param(ph)%sum_N_sl) :: &
+   grad_gamma_sl
  integer :: i
  
  associate(prm => param(ph),    stt => state(ph), &
@@ -261,9 +288,66 @@ module subroutine dislotwingnd_dotState(Mp,T,ph,me)
 
  dot%rho_mob(:,me) = dot_rho_ssd_formation - dot_rho_ssd_athermal_anni
 
+ call getgradient_for_gamma_sl(ph, el)
+
+ GND: do i = 1, prm%sum_N_sl
+  dot%rho_gnd_edge (i,me)  = -math_inner(grad_gamma_sl(1:3,i),prm%M_sl(1:3,i))/prm%b_sl(i)
+  dot%rho_gnd_screw(i,me)  =  math_inner(grad_gamma_sl(1:3,i),prm%T_sl(1:3,i))/prm%b_sl(i)         
+ enddo GND
+ 
  end associate
  
 end subroutine dislotwingnd_dotState
+
+!--------------------------------------------------------------------------------------------------
+!@brief evaluate gradient field of shear strain
+!--------------------------------------------------------------------------------------------------
+module subroutine getgradient_for_gamma_sl(ph, el)
+
+ use spectral_utilities
+ use discretization_grid
+ 
+ integer,       intent(in) :: &
+   ph,
+   el
+ integer :: &
+   eli, ip, &
+   k, j, i, &
+   phi, me, &
+   n
+ real(pReal), dimension(param(ph)%sum_N_sl,grid(1),grid(2),grid3) :: &
+    gamma_sl_forall
+ real(pReal), dimension(3,param(ph)%sum_N_sl,discretization_Nelems) :: &   
+    grad_gamma_sl_forall
+  
+ !$OMP PARALLEL DO PRIVATE(ph,me)
+ eli = 0
+ do k = 1, grid3; do j = 1, grid(2); do i = 1, grid(1)
+   eli = eli + 1
+     do ip = 1, size(material_phaseMemberAt,2)
+       phi = material_phaseAt(1,el)
+       me = material_phaseMemberAt(1,ip,eli)
+        
+       gamma_sl_forall(:,i,j,k)=plasticState(phi)%state(phi)%gamma_sl(:,me)
+
+    enddo
+ enddo;enddo;enddo   
+
+ do n = 1, size(gamma_sl_forall,1)
+   scalarField_real = 0.0_pReal
+   scalarField_real(1:grid(1),1:grid(2),1:grid3) = gamma_sl_forall(n,1:grid(1),1:grid(2),1:grid3)         
+   call utilities_FFTscalarForward
+   call utilities_fourierScalarGradient                                                              !< calculate gradient of shear rate field
+   call utilities_FFTvectorBackward
+   
+   eli = 0
+    do k = 1, grid3;  do j = 1, grid(2);  do i = 1,grid(1)
+       eli = eli + 1
+       grad_gamma_sl_forall(1:3,n,eli) = vectorField_real(1:3,i,j,k)                 !save the gardient field into grad_gamma_sl
+    enddo;enddo;enddo
+ enddo
+   grad_gamma_sl(:,:) =grad_gamma_sl_forall(:,:,el)
+end subroutine getgradient_for_gamma_sl
 
 !--------------------------------------------------------------------------------------------------
 !> @brief calculates derived quantities from state
@@ -284,7 +368,8 @@ module subroutine dislotwingnd_dependentState(T,ph,me)
            
  !* threshold stress for dislocation motion
  do i = 1 , prm%sum_N_sl
-  dst%tau_pass(i,me) = prm%c1*prm%mu*prm%b_sl(i)*sqrt(stt%rho_mob(i,of))                      !!!now only for mob dislo, gnd dislo later
+  rho_gnd(i)  = sqrt(sst%rho_gnd_edge(i,me)**2.0_pReal + sst%rho_gnd_screw(i,me)**2.0_pReal))
+  dst%tau_pass(i,me) = prm%c1*prm%mu*prm%b_sl(i)*sqrt(stt%rho_mob(i,me)+rho_gnd(i))                      !!!now only for mob dislo, gnd dislo later
  enddo
  
  end associate
@@ -308,6 +393,13 @@ module subroutine plastic_dislotwingnd_results(ph,group)
       case('rho_mob')
         if(prm%sum_N_sl>0) call results_writeDataset(group,stt%rho_mob,trim(prm%output(o)), &
                                                      'mobile dislocation density','1/m²')
+      case('rho_gnd_edge')
+        if(prm%sum_N_sl>0) call results_writeDataset(group,stt%rho_gnd_edge,trim(prm%output(o)), &
+                                                     'edge_gnd dislocation density','1/m²')
+      case('rho_gnd_screw')
+        if(prm%sum_N_sl>0) call results_writeDataset(group,stt%rho_gnd_screw,trim(prm%output(o)), &
+                                                     'screw_gnd dislocation density','1/m²')
+      
       case('gamma_sl')
         if(prm%sum_N_sl>0) call results_writeDataset(group,stt%gamma_sl,trim(prm%output(o)), &
                                                      'plastic shear','1')
