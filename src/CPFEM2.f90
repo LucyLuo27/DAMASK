@@ -26,7 +26,8 @@ module CPFEM2
 #elif defined(Grid)
   use discretization_grid
 #endif
-
+  use spectral_utilities
+  
   implicit none
   public
 
@@ -59,6 +60,7 @@ subroutine CPFEM_initAll
 #elif defined(Grid)
   call discretization_grid_init(restart=interface_restartInc>0)
 #endif
+  call spectral_Utilities_init
   call material_init(restart=interface_restartInc>0)
   call phase_init
   call homogenization_init
