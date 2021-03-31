@@ -1,10 +1,10 @@
 
-submodule (phase:plastic) dislotwingnd
+submodule(phase:plastic) dislotwingnd
  
- real(pReal),                                    parameter,           private :: &
+ real(pReal), parameter:: &
    kB = 1.38e-23_pReal                                                                                 !< Boltzmann constant in J/Kelvin
 
- type, private :: tParameters
+ type :: tParameters
    real(pReal) :: &
      mu                   = 1.0_pReal, &                                                            !< equivalent shear modulus
      nu                   = 1.0_pReal, &                                                            !< equivalent shear Poisson's ratio
@@ -16,7 +16,7 @@ submodule (phase:plastic) dislotwingnd
      b_sl, &                                                                                        !< absolute length of burgers vector [m] for each slip system
      Delta_F,&                                                                                      !< activation energy for glide [J] for each slip system
      Delta_V,&                                                                                      !< activation wolume for glide [b^3] for each slip system
-     v0                                                                                             !< dislocation velocity prefactor [m/s] for each slip system
+     v_0                                                                                             !< dislocation velocity prefactor [m/s] for each slip system
    real(pReal),                  dimension(:,:),   allocatable :: &
      M_sl, &                                                                                        !!!< slip direction m
      T_sl
@@ -24,17 +24,17 @@ submodule (phase:plastic) dislotwingnd
      P_sl
    integer :: & 
      sum_N_sl                                                                                       !< total number of active slip system
-   integer(kind(undefined_ID)),  dimension(:),     allocatable :: &
-     outputID                                                                                       !< ID of each post result output
+   character(len=pStringLen),    allocatable, dimension(:) :: &
+      output                                                                                      !< ID of each post result output
  end type
  
- type, private :: tDislotwingndState
+ type :: tDislotwingndState
    real(pReal),                  dimension(:,:),   pointer :: &
      rho_mob, &
      gamma_sl
  end type tDislotwingndState 
 
- type, private :: tDislotwingndMicrostructure
+ type :: tDislotwingndMicrostructure
    real(pReal),                  dimension(:,:),   allocatable :: &
       tau_pass, &
       rho_gnd
@@ -42,11 +42,11 @@ submodule (phase:plastic) dislotwingnd
 
 !--------------------------------------------------------------------------------------------------
 ! containers for parameters and state
- type(tParameters),                 allocatable, dimension(:), private :: param
- type(tDislotwingndState),          allocatable, dimension(:), private :: &
+ type(tParameters),                 allocatable, dimension(:) :: param
+ type(tDislotwingndState),          allocatable, dimension(:) :: &
    dotState, &
    state
- type(tDislotwingndMicrostructure), allocatable, dimension(:), private :: microstructure
+ type(tDislotwingndMicrostructure), allocatable, dimension(:) :: dependentState
 
 contains
 
@@ -81,7 +81,7 @@ module function plastic_dislotwingnd_init() result(myPlasticity)
   myPlasticity = plastic_active('dislotwingnd')
   if(count(myPlasticity) == 0) return
 
-  print'(/,a)', ' <<<+-  phase:mechanical:plastic:dislotwin init  -+>>>'
+  print'(/,a)', ' <<<+-  phase:mechanical:plastic:dislotwingnd init  -+>>>'
   print'(a,i0)', ' # phases: ',count(myPlasticity); flush(IO_STDOUT)
 
   print*, 'Ma and Roters, Acta Materialia 52(12):3603–3612, 2004'
@@ -127,9 +127,9 @@ module function plastic_dislotwingnd_init() result(myPlasticity)
    slipActive: if (prm%sum_N_sl > 0) then
      prm%P_sl = lattice_SchmidMatrix_slip(N_sl,phase%get_asString('lattice'),&
                                           phase%get_asFloat('c/a',defaultVal=0.0_pReal))
-     prm%M_sl = lattice_slip_direction(N_sl,phase%get_asString('lattice_structure'),&                           !!!slip direction m
+     prm%M_sl = lattice_slip_direction(N_sl,phase%get_asString('lattice'),&                           !!!slip direction m
                                        phase%get_asFloat('c/a',defaultVal=0.0_pReal))
-     prm%T_sl = lattice_slip_transverse(N_sl,phase%get_asString('lattice_structure'),&                           !!!normal slip plane m
+     prm%T_sl = lattice_slip_transverse(N_sl,phase%get_asString('lattice'),&                           !!!normal slip plane m
                                          phase%get_asFloat('c/a',defaultVal=0.0_pReal))
      
      rho_mob_0                = pl%get_asFloats('rho_mob_0',      requiredSize=size(N_sl))
@@ -139,14 +139,14 @@ module function plastic_dislotwingnd_init() result(myPlasticity)
      prm%tau_0                = pl%get_asFloats('tau_0',          requiredSize=size(N_sl))
      
      prm%Delta_V              = pl%get_asFloat('activ_volume') * prm%b_sl**3.0_pReal
-     prm%c1                   = pl%get_asFloat('c1_passsingstress')
+     prm%c1                   = pl%get_asFloat('c1_passingstress')
      prm%c2                   = pl%get_asFloat('c2_rhoformation')
      prm%c3                   = pl%get_asFloat('c3_rhoathermal')   
      
      ! expand: family => system
      rho_mob_0        = math_expand(rho_mob_0,       N_sl)
      prm%tau_0        = math_expand(prm%tau_0,       N_sl)
-     prm%v0           = math_expand(prm%v0,          N_sl)
+     prm%v_0          = math_expand(prm%v_0,          N_sl)
      prm%b_sl         = math_expand(prm%b_sl,        N_sl)
      prm%Delta_F      = math_expand(prm%Delta_F,     N_sl)
      prm%Delta_V      = math_expand(prm%Delta_V,     N_sl)
@@ -154,14 +154,14 @@ module function plastic_dislotwingnd_init() result(myPlasticity)
      ! sanity checks
      if (any(rho_mob_0        <  0.0_pReal))         extmsg = trim(extmsg)//' rho_mob_0'
      if (any(prm%tau_0        <  0.0_pReal))         extmsg = trim(extmsg)//' tau_0'
-     if (any(prm%v0           <  0.0_pReal))         extmsg = trim(extmsg)//' v0'
+     if (any(prm%v_0          <  0.0_pReal))         extmsg = trim(extmsg)//' v_0'
      if (any(prm%b_sl         <= 0.0_pReal))         extmsg = trim(extmsg)//' b_sl'
      if (any(prm%Delta_F      <= 0.0_pReal))         extmsg = trim(extmsg)//' Delta_F'
      if (any(prm%Delta_V      <= 0.0_pReal))         extmsg = trim(extmsg)//' Delta_V'
 
    else slipActive
      rho_mob_0 = emptyRealArray
-     allocate(prm%b_sl,prm%Q_s,prm%v_0,source=emptyRealArray)
+     allocate(prm%b_sl,prm%Delta_F,prm%v_0,source=emptyRealArray)
    endif slipActive
 
 !--------------------------------------------------------------------------------------------------
@@ -177,16 +177,16 @@ module function plastic_dislotwingnd_init() result(myPlasticity)
 ! locally defined state aliases and initialization of state0 and aTolState
    startIndex = 1
    endIndex   = prm%sum_N_sl
-   stt%rho_mob=>plasticState(p)%state(startIndex:endIndex,:)
-   stt%rho_mob= spread(prm%rho_mob_0,2,Nmembers)
-   dot%rho_mob=>plasticState(p)%dotState(startIndex:endIndex,:)
+   stt%rho_mob=>plasticState(ph)%state(startIndex:endIndex,:)
+   stt%rho_mob= spread(rho_mob_0,2,Nmembers)
+   dot%rho_mob=>plasticState(ph)%dotState(startIndex:endIndex,:)
    plasticState(ph)%atol(startIndex:endIndex) = pl%get_asFloat('atol_rho',defaultVal=1.0_pReal)
    if (any(plasticState(ph)%atol(startIndex:endIndex) < 0.0_pReal)) extmsg = trim(extmsg)//' atol_rho'
    
    startIndex = endIndex + 1
    endIndex   = endIndex + prm%sum_N_sl
-   stt%gamma_sl=>plasticState(p)%state(startIndex:endIndex,:)
-   dot%gamma_sl=>plasticState(p)%dotState(startIndex:endIndex,:)
+   stt%gamma_sl=>plasticState(ph)%state(startIndex:endIndex,:)
+   dot%gamma_sl=>plasticState(ph)%dotState(startIndex:endIndex,:)
    plasticState(ph)%atol(startIndex:endIndex) = 1.0e-2_pReal
    ! global alias
    plasticState(ph)%slipRate        => plasticState(ph)%dotState(startIndex:endIndex,:)
@@ -242,7 +242,7 @@ end subroutine dislotwingnd_LpAndItsTangent
 !--------------------------------------------------------------------------------------------------
 !> @brief calculates the rate of change of microstructure
 !--------------------------------------------------------------------------------------------------
-module subroutine dislotwingnd_dotState(Mp,T,ph,me,el)
+module subroutine dislotwingnd_dotState(Mp,T,ph,me)
 
  real(pReal), dimension(3,3),  intent(in):: &
    Mp                                                                                               !< Mandel stress
@@ -260,7 +260,7 @@ module subroutine dislotwingnd_dotState(Mp,T,ph,me,el)
  integer :: i
  
  associate(prm => param(ph),    stt => state(ph), &
-           dot => dotstate(ph), dst => microstructure(ph))
+           dot => dotstate(ph), dst => dependentState(ph))
 
  call kinetics_slip(Mp,T,ph,me,dot_gamma_sl)
  dot%gamma_sl(:,me) = abs(dot_gamma_sl) 
@@ -280,14 +280,14 @@ end subroutine dislotwingnd_dotState
 !--------------------------------------------------------------------------------------------------
 !@brief evaluate gradient field of shear strain
 !--------------------------------------------------------------------------------------------------
-module subroutine get_rhognd(ph, el, dst_rho_gnd)
+module subroutine get_rhognd(ph, me, dst_rho_gnd)
 
  use spectral_utilities
  use discretization_grid
  
  integer,       intent(in) :: &
-   ph,
-   el
+   ph, &
+   me
  integer :: &
    eli, ip, &
    k, j, i, &
@@ -303,7 +303,7 @@ module subroutine get_rhognd(ph, el, dst_rho_gnd)
  real(pReal), dimension(param(ph)%sum_N_sl),intent(out):: &
         dst_rho_gnd
   
- !$OMP PARALLEL DO PRIVATE(ph,me)
+ !OMP PARALLEL DO PRIVATE(ph,me)
  eli = 0
  elementLooping: do k = 1, grid3; do j = 1, grid(2); do i = 1, grid(1)
    eli = eli + 1
@@ -356,11 +356,11 @@ module subroutine dislotwingnd_dependentState(T,ph,me)
    i
  associate(prm => param(ph),&
            stt => state(ph),&
-           dst => microstructure(ph))  
+           dst => dependentState(ph))  
            
  !gradient field of shear
-  call get_rhognd(ph, me, dst_rho_gnd)
-  dst%rho_gnd (:,me) = dst_rho_gnd
+ call get_rhognd(ph, me, dst_rho_gnd)
+ dst%rho_gnd (:,me) = dst_rho_gnd
   
  !* threshold stress for dislocation motion
  do i = 1 , prm%sum_N_sl
@@ -443,7 +443,7 @@ pure subroutine kinetics_slip(Mp,T,ph,me, &
  
  integer :: i
  
- associate(prm => param(ph), stt => state(ph), dst => microstructure(ph))
+ associate(prm => param(ph), stt => state(ph), dst => dependentState(ph))
 
  do i = 1, prm%sum_N_sl
    tau(i) = math_tensordot(Mp,prm%P_sl(1:3,1:3,i))
@@ -455,13 +455,13 @@ pure subroutine kinetics_slip(Mp,T,ph,me, &
     if (tau_eff(i)>tol_math_check) then
       ActEnergyRatio(i)  = exp(-prm%Delta_F(i)/(kB*T))
       ActVolumeRatio(i)  = prm%Delta_V(i)/(kB*T)
-      sinh_tau(i)        = sinh(ActVolumeRatio(i)*sign(tau_eff(i),tau(i))
+      sinh_tau(i)        = sinh(ActVolumeRatio(i)*sign(tau_eff(i),tau(i)))
       
-      dot_gamma_sl(i)    = stt%rho_mob(i,me)*prm%b_sl(i)*prm%v0(i)*ActEnergyRatio(i)*sinh_tau(i)
+      dot_gamma_sl(i)    = stt%rho_mob(i,me)*prm%b_sl(i)*prm%v_0(i)*ActEnergyRatio(i)*sinh_tau(i)
       
       dsinh_tau_dtau(i)  = cosh(ActVolumeRatio(i)*tau_eff(i))*ActVolumeRatio(i)
       
-      ddot_gamma_dtau(i) = stt%rho_mob(i,me)*prm%b_sl(i)*prm%v0(i)*ActEnergyRatio(i)*dsinh_tau_dtau(i)
+      ddot_gamma_dtau(i) = stt%rho_mob(i,me)*prm%b_sl(i)*prm%v_0(i)*ActEnergyRatio(i)*dsinh_tau_dtau(i)
     
      else
      
