@@ -118,7 +118,7 @@ program DAMASK_grid
   call CPFEM_initAll
   print'(/,a)',   ' <<<+-  DAMASK_grid init  -+>>>'; flush(IO_STDOUT)
 
-  print*, 'P. Shanthraj et al., Handbook of Mechanics of Materials, 2019'
+  print*, 'Shanthraj et al., Handbook of Mechanics of Materials, 2019'
   print*, 'https://doi.org/10.1007/978-981-10-6855-3_80'
 
 
@@ -302,7 +302,7 @@ program DAMASK_grid
 
 !--------------------------------------------------------------------------------------------------
 ! doing initialization depending on active solvers
-  call spectral_Utilities_init
+  !call spectral_Utilities_init                 !!!revise
   do field = 1, nActiveFields
     select case (ID(field))
       case(FIELD_MECH_ID)
